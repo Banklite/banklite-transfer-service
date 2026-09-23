@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from .config import settings
 from .database import Base, engine
 from .routers import catalog, transfers
+from .scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(settings.service_name)
@@ -16,8 +17,10 @@ logger = logging.getLogger(settings.service_name)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    start_scheduler()
     logger.info("%s iniciado", settings.service_name)
     yield
+    stop_scheduler()
 
 
 app = FastAPI(
