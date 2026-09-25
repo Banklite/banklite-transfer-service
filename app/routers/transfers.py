@@ -36,6 +36,16 @@ def create_transfer(payload: TransferCreate, db: Session = Depends(get_db)):
        operacion critica que el documento exige hacer por REST),
     5) si todo sale bien, publica el evento ASINCRONO transfer.completed.
     """
+    if payload.idempotency_key:
+        existente = db.execute(select(Transferencia).where(Transferencia.idempotency_key == payload.idempotency_key)).scalars().first()
+        if existente:
+            return TransferResult(
+                transferencia=existente,
+                id_transaccion_ledger="re-enviado",
+                validado_via="cache-idempotencia",
+                event_published=False
+            )
+
     beneficiario = db.get(Beneficiario, payload.id_beneficiario)
     if beneficiario is None:
         raise HTTPException(
@@ -99,12 +109,17 @@ def create_transfer(payload: TransferCreate, db: Session = Depends(get_db)):
     else:
         id_cuenta_destino = CUENTA_PUENTE_EXTERNA
 
+    import datetime
+    ref_base = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     transferencia = Transferencia(
         id_cuenta_origen=payload.id_cuenta_origen,
         id_beneficiario=payload.id_beneficiario,
         id_riel=payload.id_riel,
         monto=payload.monto,
-        estado="pendiente",
+        estado="procesando",
+        concepto=payload.concepto,
+        referencia=f"BL-{ref_base}-{str(uuid.uuid4())[:6].upper()}",
+        idempotency_key=payload.idempotency_key,
     )
     db.add(transferencia)
     db.flush()

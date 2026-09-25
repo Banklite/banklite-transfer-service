@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
@@ -17,6 +17,22 @@ logger = logging.getLogger(settings.service_name)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE transferencia ADD COLUMN IF NOT EXISTS concepto VARCHAR(255);"))
+        conn.execute(text("ALTER TABLE transferencia ADD COLUMN IF NOT EXISTS referencia VARCHAR(100);"))
+        conn.execute(text("ALTER TABLE transferencia ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(100);"))
+        try:
+            conn.execute(text("ALTER TABLE transferencia ALTER COLUMN estado TYPE VARCHAR(50);"))
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE transferencia DROP CONSTRAINT IF EXISTS ck_transferencia_estado;"))
+        except Exception:
+            pass
+        conn.execute(text("INSERT INTO riel_pago (id_riel, tipo, descripcion, activo) VALUES ('r-interno', 'interno', 'Interno BankLite', true) ON CONFLICT (id_riel) DO NOTHING;"))
+        conn.execute(text("INSERT INTO riel_pago (id_riel, tipo, descripcion, activo) VALUES ('r-ach', 'ACH', 'ACH Camara Compensacion', true) ON CONFLICT (id_riel) DO NOTHING;"))
+        conn.execute(text("INSERT INTO riel_pago (id_riel, tipo, descripcion, activo) VALUES ('r-swift', 'SWIFT', 'SWIFT Internacional', true) ON CONFLICT (id_riel) DO NOTHING;"))
     start_scheduler()
     logger.info("%s iniciado", settings.service_name)
     yield
@@ -36,24 +52,20 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # solo para desarrollo local; en produccion se restringe al dominio del panel
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(catalog.router)
-app.include_router(transfers.router)
-
-
-@app.get("/health", tags=["infra"])
-def health():
-    return {"status": "ok", "service": settings.service_name}
-
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(request: Request, exc: Exception):
-    logger.exception("Error no controlado en %s %s", request.method, request.url.path)
+async def generic_error_handler(request: Request, exc: Exception):
+    logger.error("Error no manejado: %s", exc, exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Error interno del servicio"},
+        content={"detail": "Error interno del servidor"},
     )
+
+
+app.include_router(catalog.router)
+app.include_router(transfers.router)

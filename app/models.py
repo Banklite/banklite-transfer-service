@@ -13,7 +13,7 @@ def _now() -> datetime:
 
 
 class Beneficiario(Base):
-    """Tabla beneficiario — destinatario de una transferencia, reutilizable
+    """Tabla beneficiario â€” destinatario de una transferencia, reutilizable
     entre varias transferencias del mismo usuario.
 
     BENEFICIARIO(id_beneficiario, id_usuario FK Ext, nombre, cuenta_destino,
@@ -32,7 +32,7 @@ class Beneficiario(Base):
 
 
 class RielPago(Base):
-    """Tabla riel_pago — canal por el que viaja una transferencia.
+    """Tabla riel_pago â€” canal por el que viaja una transferencia.
 
     RIEL_PAGO(id_riel, tipo, pais, activo).
     """
@@ -49,7 +49,7 @@ class RielPago(Base):
 
 
 class Transferencia(Base):
-    """Tabla transferencia — entidad raiz del microservicio.
+    """Tabla transferencia â€” entidad raiz del microservicio.
 
     TRANSFERENCIA(id_transferencia, id_cuenta_origen FK Ext, id_beneficiario FK,
     id_riel FK, monto, estado, fecha_solicitud). id_cuenta_origen es una
@@ -60,7 +60,7 @@ class Transferencia(Base):
     __table_args__ = (
         CheckConstraint("monto > 0", name="ck_transferencia_monto_positivo"),
         CheckConstraint(
-            "estado IN ('pendiente','completada','rechazada')", name="ck_transferencia_estado"
+            "estado IN ('pendiente','procesando','completada','rechazada','cancelada','en_revision')", name="ck_transferencia_estado"
         ),
         Index("idx_transferencia_beneficiario", "id_beneficiario"),
         Index("idx_transferencia_riel", "id_riel"),
@@ -74,8 +74,11 @@ class Transferencia(Base):
     )
     id_riel: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("riel_pago.id_riel"), nullable=False)
     monto: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
-    estado: Mapped[str] = mapped_column(String(16), nullable=False, default="pendiente")
+    estado: Mapped[str] = mapped_column(String(50), nullable=False, default="procesando")
     fecha_solicitud: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    concepto: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    referencia: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
 
     beneficiario: Mapped["Beneficiario"] = relationship(back_populates="transferencias")
     riel: Mapped["RielPago"] = relationship(back_populates="transferencias")
@@ -85,7 +88,7 @@ class Transferencia(Base):
 
 
 class TransferenciaProgramada(Base):
-    """Tabla transferencia_programada — recurrencia opcional 1:1 sobre una
+    """Tabla transferencia_programada â€” recurrencia opcional 1:1 sobre una
     transferencia base.
 
     TRANSFERENCIA_PROGRAMADA(id_programacion, id_transferencia FK, frecuencia,

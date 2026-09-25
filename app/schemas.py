@@ -1,4 +1,4 @@
-import uuid
+﻿import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
@@ -42,6 +42,8 @@ class TransferCreate(BaseModel):
     id_beneficiario: uuid.UUID
     id_riel: uuid.UUID
     monto: Decimal = Field(gt=0)
+    concepto: str | None = None
+    idempotency_key: str | None = None
 
 
 class ProgramacionCreate(BaseModel):
@@ -68,6 +70,8 @@ class TransferenciaOut(BaseModel):
     monto: Decimal
     estado: str
     fecha_solicitud: datetime
+    concepto: str | None = None
+    referencia: str | None = None
 
 
 class TransferResult(BaseModel):
