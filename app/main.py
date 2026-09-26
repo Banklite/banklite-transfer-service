@@ -69,6 +69,11 @@ app.add_middleware(
 )
 
 
+@app.get("/health", tags=["infra"])
+def health():
+    return {"status": "ok", "service": settings.service_name}
+
+
 @app.exception_handler(Exception)
 async def generic_error_handler(request: Request, exc: Exception):
     logger.error("Error no manejado: %s", exc, exc_info=True)
