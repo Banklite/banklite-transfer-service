@@ -30,9 +30,20 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE transferencia DROP CONSTRAINT IF EXISTS ck_transferencia_estado;"))
         except Exception:
             pass
-        conn.execute(text("INSERT INTO riel_pago (id_riel, tipo, descripcion, activo) VALUES ('r-interno', 'interno', 'Interno BankLite', true) ON CONFLICT (id_riel) DO NOTHING;"))
-        conn.execute(text("INSERT INTO riel_pago (id_riel, tipo, descripcion, activo) VALUES ('r-ach', 'ACH', 'ACH Camara Compensacion', true) ON CONFLICT (id_riel) DO NOTHING;"))
-        conn.execute(text("INSERT INTO riel_pago (id_riel, tipo, descripcion, activo) VALUES ('r-swift', 'SWIFT', 'SWIFT Internacional', true) ON CONFLICT (id_riel) DO NOTHING;"))
+        riel_pago_seeds = [
+            ("00000000-0000-0000-0000-000000000101", "interno", None),
+            ("00000000-0000-0000-0000-000000000102", "ACH", "CO"),
+            ("00000000-0000-0000-0000-000000000103", "SWIFT", None),
+        ]
+        for id_riel, tipo, pais in riel_pago_seeds:
+            conn.execute(
+                text(
+                    "INSERT INTO riel_pago (id_riel, tipo, pais, activo) "
+                    "VALUES (:id_riel, :tipo, :pais, true) "
+                    "ON CONFLICT (id_riel) DO NOTHING"
+                ),
+                {"id_riel": id_riel, "tipo": tipo, "pais": pais},
+            )
     start_scheduler()
     logger.info("%s iniciado", settings.service_name)
     yield
