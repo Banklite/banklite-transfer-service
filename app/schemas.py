@@ -11,6 +11,14 @@ class BeneficiarioCreate(BaseModel):
     nombre: str | None = Field(default=None, max_length=120)
     cuenta_destino: str = Field(min_length=4, max_length=64)
     banco_destino: str | None = Field(default=None, max_length=120)
+    favorito: bool = False
+    alias: str | None = Field(default=None, max_length=60)
+
+
+class BeneficiarioUpdate(BaseModel):
+    favorito: bool | None = None
+    alias: str | None = Field(default=None, max_length=60)
+    nombre: str | None = Field(default=None, max_length=120)
 
 
 class BeneficiarioOut(BaseModel):
@@ -21,6 +29,8 @@ class BeneficiarioOut(BaseModel):
     nombre: str | None
     cuenta_destino: str
     banco_destino: str | None
+    favorito: bool = False
+    alias: str | None = None
 
 
 class RielPagoCreate(BaseModel):

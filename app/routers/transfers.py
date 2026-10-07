@@ -1,12 +1,15 @@
+import threading
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..account_client import AccountUnavailable, get_account
 from ..database import get_db
 from ..events import EVENT_TRANSFER_COMPLETED, publish_event
+from ..fraud_client import check_transfer
+from ..notification_client import notificar_bloqueo, notificar_transferencia
 from ..ledger_client import LedgerRejected, LedgerUnavailable, get_ledger_balance, post_entry
 from ..models import Beneficiario, RielPago, Transferencia, TransferenciaProgramada
 from ..schemas import (
@@ -26,7 +29,7 @@ CUENTA_PUENTE_EXTERNA = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 @router.post("", response_model=TransferResult, status_code=status.HTTP_201_CREATED)
-def create_transfer(payload: TransferCreate, db: Session = Depends(get_db)):
+def create_transfer(payload: TransferCreate, background: BackgroundTasks, db: Session = Depends(get_db)):
     """Ejecuta una transferencia inmediata:
 
     1) valida el beneficiario y el riel de pago (catalogo propio),
@@ -129,6 +132,28 @@ def create_transfer(payload: TransferCreate, db: Session = Depends(get_db)):
     db.add(transferencia)
     db.flush()
 
+    # --- Antifraude (sincrono): bloquea montos/rafagas/acumulados sospechosos ---
+    veredicto = check_transfer(
+        transferencia.id_transferencia, payload.id_cuenta_origen, id_cuenta_destino, payload.monto
+    )
+    if veredicto.resultado == "bloqueada":
+        transferencia.estado = "rechazada"
+        db.commit()
+        # Un HTTPException descarta las BackgroundTasks, asi que el aviso va en un hilo aparte
+        threading.Thread(
+            target=notificar_bloqueo,
+            kwargs={
+                "id_usuario": cuenta_origen.get("id_usuario"),
+                "monto": payload.monto,
+                "motivo": veredicto.motivo,
+            },
+            daemon=True,
+        ).start()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Transferencia bloqueada por seguridad: {veredicto.motivo or 'actividad sospechosa'}",
+        )
+
     try:
         entry = post_entry(
             referencia=str(transferencia.id_transferencia),
@@ -148,6 +173,24 @@ def create_transfer(payload: TransferCreate, db: Session = Depends(get_db)):
     transferencia.estado = "completada"
     db.commit()
     db.refresh(transferencia)
+
+    # Aviso al remitente y, si el destino es una cuenta BankLite, tambien al destinatario
+    id_usuario_destino = None
+    if riel.tipo == "interno":
+        try:
+            cuenta_destino = get_account(id_cuenta_destino)
+            id_usuario_destino = cuenta_destino.get("id_usuario") if cuenta_destino else None
+        except AccountUnavailable:
+            pass
+    background.add_task(
+        notificar_transferencia,
+        referencia=transferencia.referencia,
+        monto=transferencia.monto,
+        id_usuario_origen=cuenta_origen.get("id_usuario"),
+        id_usuario_destino=id_usuario_destino,
+        nombre_destino=beneficiario.nombre,
+        concepto=transferencia.concepto,
+    )
 
     published = publish_event(
         EVENT_TRANSFER_COMPLETED,

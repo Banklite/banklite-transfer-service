@@ -27,6 +27,8 @@ class Beneficiario(Base):
     nombre: Mapped[str] = mapped_column(String(120), nullable=True)
     cuenta_destino: Mapped[str] = mapped_column(String(64), nullable=False)
     banco_destino: Mapped[str] = mapped_column(String(120), nullable=True)
+    favorito: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    alias: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     transferencias: Mapped[list["Transferencia"]] = relationship(back_populates="beneficiario")
 

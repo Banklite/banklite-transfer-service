@@ -19,6 +19,8 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     from sqlalchemy import text
     with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE beneficiario ADD COLUMN IF NOT EXISTS favorito BOOLEAN NOT NULL DEFAULT FALSE;"))
+        conn.execute(text("ALTER TABLE beneficiario ADD COLUMN IF NOT EXISTS alias VARCHAR(60);"))
         conn.execute(text("ALTER TABLE transferencia ADD COLUMN IF NOT EXISTS concepto VARCHAR(255);"))
         conn.execute(text("ALTER TABLE transferencia ADD COLUMN IF NOT EXISTS referencia VARCHAR(100);"))
         conn.execute(text("ALTER TABLE transferencia ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(100);"))
