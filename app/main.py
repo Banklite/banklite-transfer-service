@@ -80,3 +80,8 @@ async def generic_error_handler(request: Request, exc: Exception):
 
 app.include_router(catalog.router)
 app.include_router(transfers.router)
+
+
+@app.get("/health", tags=["infra"])
+def health():
+    return {"status": "ok", "service": settings.service_name}

@@ -40,8 +40,8 @@ def create_transfer(payload: TransferCreate, db: Session = Depends(get_db)):
         existente = db.execute(select(Transferencia).where(Transferencia.idempotency_key == payload.idempotency_key)).scalars().first()
         if existente:
             return TransferResult(
-                transferencia=existente,
-                id_transaccion_ledger="re-enviado",
+                transferencia=TransferenciaOut.model_validate(existente),
+                id_transaccion_ledger=None,
                 validado_via="cache-idempotencia",
                 event_published=False
             )
@@ -105,6 +105,11 @@ def create_transfer(payload: TransferCreate, db: Session = Depends(get_db)):
                     "Para riel 'interno', cuenta_destino del beneficiario debe ser el "
                     "id_cuenta (UUID) de la cuenta destino dentro de BankLite"
                 ),
+            )
+        if id_cuenta_destino == payload.id_cuenta_origen:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La cuenta destino no puede ser la misma cuenta de origen",
             )
     else:
         id_cuenta_destino = CUENTA_PUENTE_EXTERNA
