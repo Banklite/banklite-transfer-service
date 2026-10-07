@@ -85,3 +85,4 @@ async def generic_error_handler(request: Request, exc: Exception):
 
 app.include_router(catalog.router)
 app.include_router(transfers.router)
+
