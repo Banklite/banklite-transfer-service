@@ -1,12 +1,17 @@
 ﻿import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from datetime import date
+
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from .config import settings
-from .database import Base, engine
+from .database import Base, engine, get_db
+from .models import Transferencia
 from .routers import catalog, transfers
 from .scheduler import start_scheduler, stop_scheduler
 
@@ -74,6 +79,16 @@ app.add_middleware(
 @app.get("/health", tags=["infra"])
 def health():
     return {"status": "ok", "service": settings.service_name}
+
+
+@app.get("/stats", tags=["infra"])
+def stats(db: Session = Depends(get_db)):
+    return {
+        "total_transferencias": db.execute(select(func.count()).select_from(Transferencia)).scalar(),
+        "transferencias_hoy": db.execute(
+            select(func.count()).select_from(Transferencia).where(Transferencia.fecha_solicitud >= date.today())
+        ).scalar(),
+    }
 
 
 @app.exception_handler(Exception)
