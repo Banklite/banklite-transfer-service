@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
@@ -89,3 +89,64 @@ class TransferResult(BaseModel):
     id_transaccion_ledger: uuid.UUID | None
     validado_via: str
     event_published: bool
+
+
+class ConvenioOut(BaseModel):
+    codigo: str
+    nombre: str
+    categoria: str
+    logo_emoji: str
+
+
+class ConsultaFacturaRequest(BaseModel):
+    convenio_codigo: str
+    referencia_pago: str = Field(min_length=3, max_length=50)
+
+
+class ConsultaFacturaResponse(BaseModel):
+    convenio_codigo: str
+    nombre_convenio: str
+    referencia_pago: str
+    monto: Decimal
+    fecha_vencimiento: str
+    estado_factura: str
+
+
+class PagoServicioRequest(BaseModel):
+    id_cuenta_origen: uuid.UUID
+    convenio_codigo: str
+    referencia_pago: str
+    monto: Decimal = Field(gt=0)
+
+
+class PagoServicioResponse(BaseModel):
+    id_pago: str
+    comprobante: str
+    nombre_convenio: str
+    referencia_pago: str
+    monto: Decimal
+    fecha_pago: str
+    estado: str
+
+
+class QRGenerarRequest(BaseModel):
+    id_cuenta_destino: uuid.UUID
+    nombre_titular: str
+    monto: Decimal | None = None
+    concepto: str | None = None
+
+
+class QRGenerarResponse(BaseModel):
+    qr_payload: str
+    qr_token: str
+    cuenta_destino: str
+    nombre_titular: str
+    monto: Decimal | None
+    concepto: str | None
+
+
+class QRPagarRequest(BaseModel):
+    id_cuenta_origen: uuid.UUID
+    qr_payload: str
+    monto: Decimal | None = None
+
