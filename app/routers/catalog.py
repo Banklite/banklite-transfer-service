@@ -27,6 +27,8 @@ def create_beneficiary(payload: BeneficiarioCreate, db: Session = Depends(get_db
             existente.favorito = True
         if payload.alias:
             existente.alias = payload.alias
+        if payload.telefono:
+            existente.telefono = payload.telefono
         db.commit()
         db.refresh(existente)
         return existente
