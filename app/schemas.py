@@ -37,7 +37,7 @@ class BeneficiarioOut(BaseModel):
 
 
 class RielPagoCreate(BaseModel):
-    tipo: Literal["ACH", "SWIFT", "interno"]
+    tipo: Literal["ACH", "SWIFT", "interno", "stellar-testnet"]
     pais: str | None = Field(default=None, min_length=2, max_length=2)
 
 
@@ -85,6 +85,8 @@ class TransferenciaOut(BaseModel):
     fecha_solicitud: datetime
     concepto: str | None = None
     referencia: str | None = None
+    hash_externo: str | None = None
+    red_externa: str | None = None
 
 
 class TransferResult(BaseModel):

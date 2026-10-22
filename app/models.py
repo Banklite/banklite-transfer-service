@@ -44,7 +44,7 @@ class RielPago(Base):
     __table_args__ = (CheckConstraint("tipo IN ('ACH','SWIFT','interno')", name="ck_riel_tipo"),)
 
     id_riel: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    tipo: Mapped[str] = mapped_column(String(16), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(30), nullable=False)
     pais: Mapped[str] = mapped_column(String(2), nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
@@ -82,6 +82,9 @@ class Transferencia(Base):
     concepto: Mapped[str | None] = mapped_column(String(255), nullable=True)
     referencia: Mapped[str | None] = mapped_column(String(100), nullable=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
+    # Trazabilidad del riel externo (Stellar/ACH/SWIFT) cuando cae la transferencia
+    hash_externo: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    red_externa: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     beneficiario: Mapped["Beneficiario"] = relationship(back_populates="transferencias")
     riel: Mapped["RielPago"] = relationship(back_populates="transferencias")

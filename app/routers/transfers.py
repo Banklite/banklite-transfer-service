@@ -11,6 +11,7 @@ from ..events import EVENT_TRANSFER_COMPLETED, publish_event
 from ..fraud_client import check_transfer
 from ..notification_client import notificar_bloqueo, notificar_transferencia
 from ..ledger_client import LedgerRejected, LedgerUnavailable, get_ledger_balance, post_entry
+from ..stellar_client import StellarError, enviar_pago
 from ..models import Beneficiario, RielPago, Transferencia, TransferenciaProgramada
 from ..schemas import (
     ConsultaFacturaRequest,
@@ -106,7 +107,21 @@ def create_transfer(payload: TransferCreate, background: BackgroundTasks, db: Se
             detail=f"Fondos insuficientes: saldo actual {saldo}, monto solicitado {payload.monto}",
         )
 
-    if riel.tipo == "interno":
+    es_stellar = riel.tipo == "stellar-testnet"
+    if es_stellar:
+        # Riel externo REAL (Horizon API): cuenta_destino del beneficiario es
+        # la direccion publica Stellar G... del destinatario
+        destino_stellar = (beneficiario.cuenta_destino or "").strip()
+        if len(destino_stellar) != 56 or not destino_stellar.startswith("G"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Para el riel 'stellar-testnet', cuenta_destino del beneficiario debe ser "
+                    "una direccion publica Stellar (G..., 56 caracteres)"
+                ),
+            )
+        id_cuenta_destino = CUENTA_PUENTE_EXTERNA
+    elif riel.tipo == "interno":
         try:
             id_cuenta_destino = uuid.UUID(beneficiario.cuenta_destino)
         except ValueError:
@@ -162,6 +177,19 @@ def create_transfer(payload: TransferCreate, background: BackgroundTasks, db: Se
             detail=f"Transferencia bloqueada por seguridad: {veredicto.motivo or 'actividad sospechosa'}",
         )
 
+    # --- Riel externo real (Stellar): se envia el pago ANTES de contabilizar ---
+    resultado_stellar = None
+    if es_stellar:
+        try:
+            resultado_stellar = enviar_pago(destino_stellar, payload.monto, transferencia.referencia or "")
+        except StellarError as exc:
+            transferencia.estado = "rechazada"
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"El riel Stellar no pudo procesar la transferencia: {exc}",
+            )
+
     try:
         entry = post_entry(
             referencia=str(transferencia.id_transferencia),
@@ -178,6 +206,9 @@ def create_transfer(payload: TransferCreate, background: BackgroundTasks, db: Se
             detail=f"ledger-service rechazo la transferencia: {detail}",
         )
 
+    if resultado_stellar:
+        transferencia.hash_externo = resultado_stellar.get("hash")
+        transferencia.red_externa = resultado_stellar.get("red")
     transferencia.estado = "completada"
     db.commit()
     db.refresh(transferencia)
@@ -311,26 +342,15 @@ def listar_convenios_servicios():
 
 @router.post("/servicios/consultar", response_model=ConsultaFacturaResponse, tags=["servicios"])
 def consultar_factura_servicio(payload: ConsultaFacturaRequest):
-    """Consulta el valor pendiente a pagar de una factura o referencia de servicio publico."""
+    """No hay integracion con los operadores de servicios publicos, asi que NO se
+    inventa el valor de la factura: el cliente debe digitar el monto que figura en
+    su recibo y pagarlo con POST /servicios/pagar."""
     convenio = next((c for c in CONVENIOS_COLOMBIA if c["codigo"] == payload.convenio_codigo), None)
     if not convenio:
         raise HTTPException(status_code=404, detail="Convenio no encontrado en el catalogo")
-
-    import hashlib
-    # Simula monto real y fecha de vencimiento basado en la referencia
-    hash_val = int(hashlib.md5(f"{payload.convenio_codigo}-{payload.referencia_pago}".encode()).hexdigest(), 16)
-    monto_simulado = Decimal((hash_val % 180 + 35) * 1000)  # Entre 35.000 y 215.000 COP
-
-    import datetime
-    vence = (datetime.datetime.now() + datetime.timedelta(days=7)).strftime("%Y-%m-%d")
-
-    return ConsultaFacturaResponse(
-        convenio_codigo=convenio["codigo"],
-        nombre_convenio=convenio["nombre"],
-        referencia_pago=payload.referencia_pago,
-        monto=monto_simulado,
-        fecha_vencimiento=vence,
-        estado_factura="pendiente",
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="La consulta automatica de facturas no esta disponible. Ingresa el valor que aparece en tu recibo.",
     )
 
 

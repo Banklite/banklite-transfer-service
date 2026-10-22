@@ -29,6 +29,8 @@ async def lifespan(app: FastAPI):
         conn.execute(text("ALTER TABLE transferencia ADD COLUMN IF NOT EXISTS concepto VARCHAR(255);"))
         conn.execute(text("ALTER TABLE transferencia ADD COLUMN IF NOT EXISTS referencia VARCHAR(100);"))
         conn.execute(text("ALTER TABLE transferencia ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(100);"))
+        conn.execute(text("ALTER TABLE transferencia ADD COLUMN IF NOT EXISTS hash_externo VARCHAR(100);"))
+        conn.execute(text("ALTER TABLE transferencia ADD COLUMN IF NOT EXISTS red_externa VARCHAR(50);"))
         try:
             conn.execute(text("ALTER TABLE transferencia ALTER COLUMN estado TYPE VARCHAR(50);"))
         except Exception:
@@ -37,10 +39,20 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE transferencia DROP CONSTRAINT IF EXISTS ck_transferencia_estado;"))
         except Exception:
             pass
+        # Permitir el nuevo riel stellar-testnet en la tabla (check constraint)
+        conn.execute(text("ALTER TABLE riel_pago ALTER COLUMN tipo TYPE VARCHAR(30);"))
+        conn.execute(text("ALTER TABLE riel_pago DROP CONSTRAINT IF EXISTS ck_riel_tipo;"))
+        conn.execute(
+            text(
+                "ALTER TABLE riel_pago ADD CONSTRAINT ck_riel_tipo CHECK "
+                "(tipo IN ('ACH','SWIFT','interno','stellar-testnet'));"
+            )
+        )
         riel_pago_seeds = [
             ("00000000-0000-0000-0000-000000000101", "interno", None),
             ("00000000-0000-0000-0000-000000000102", "ACH", "CO"),
             ("00000000-0000-0000-0000-000000000103", "SWIFT", None),
+            ("00000000-0000-0000-0000-000000000104", "stellar-testnet", None),
         ]
         for id_riel, tipo, pais in riel_pago_seeds:
             conn.execute(

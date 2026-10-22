@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     fraud_timeout_seconds: float = 8.0
     fraud_enabled: bool = True
 
+    # Riel de pagos Stellar (Horizon API). TESTNET es gratuito (Friendbot).
+    stellar_treasury_secret: str | None = None
+    stellar_network: str = "TESTNET"
+    stellar_horizon_url: str | None = None
+
     rabbitmq_url: str = "amqp://banklite:banklite@rabbitmq:5672/"
     events_exchange: str = "banklite.events"
     enable_events: bool = True
