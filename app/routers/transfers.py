@@ -221,16 +221,8 @@ def create_transfer(payload: TransferCreate, background: BackgroundTasks, db: Se
             id_usuario_destino = cuenta_destino.get("id_usuario") if cuenta_destino else None
         except AccountUnavailable:
             pass
-    background.add_task(
-        notificar_transferencia,
-        referencia=transferencia.referencia,
-        monto=transferencia.monto,
-        id_usuario_origen=cuenta_origen.get("id_usuario"),
-        id_usuario_destino=id_usuario_destino,
-        nombre_destino=beneficiario.nombre,
-        concepto=transferencia.concepto,
-    )
-
+    # El evento lleva todo lo que notification-service necesita para avisar. Si el bus
+    # no esta disponible (published=False) se usa REST como respaldo, para no perder el aviso.
     published = publish_event(
         EVENT_TRANSFER_COMPLETED,
         {
@@ -240,8 +232,23 @@ def create_transfer(payload: TransferCreate, background: BackgroundTasks, db: Se
             "monto": str(transferencia.monto),
             "estado": transferencia.estado,
             "fecha_solicitud": transferencia.fecha_solicitud.isoformat(),
+            "referencia": transferencia.referencia,
+            "concepto": transferencia.concepto,
+            "nombre_destino": beneficiario.nombre,
+            "id_usuario_origen": str(cuenta_origen.get("id_usuario")) if cuenta_origen.get("id_usuario") else None,
+            "id_usuario_destino": str(id_usuario_destino) if id_usuario_destino else None,
         },
     )
+    if not published:
+        background.add_task(
+            notificar_transferencia,
+            referencia=transferencia.referencia,
+            monto=transferencia.monto,
+            id_usuario_origen=cuenta_origen.get("id_usuario"),
+            id_usuario_destino=id_usuario_destino,
+            nombre_destino=beneficiario.nombre,
+            concepto=transferencia.concepto,
+        )
 
     return TransferResult(
         transferencia=TransferenciaOut.model_validate(transferencia),
