@@ -533,12 +533,57 @@ def pagar_con_qr(payload: QRPagarRequest, background: BackgroundTasks, db: Sessi
     db.commit()
     db.refresh(transferencia)
 
+    # Igual que en una transferencia normal: el aviso al remitente y al destinatario viaja en el
+    # evento transfer.completed (o por REST si el bus no esta disponible).
+    published = _avisar_transferencia_completada(
+        transferencia, payload.id_cuenta_origen, id_cuenta_destino, beneficiario.nombre, background
+    )
+
     return TransferResult(
         transferencia=TransferenciaOut.model_validate(transferencia),
         id_transaccion_ledger=uuid.UUID(entry["id_transaccion"]),
         validado_via="QR Interoperable (REST sincrono doble partida)",
-        event_published=True,
+        event_published=published,
     )
+
+
+def _avisar_transferencia_completada(transferencia, id_cuenta_origen, id_cuenta_destino, nombre_destino, background) -> bool:
+    """Publica transfer.completed con los datos que necesita notification-service. Devuelve si se publico."""
+    id_usuario_origen = id_usuario_destino = None
+    try:
+        origen = get_account(id_cuenta_origen)
+        destino = get_account(id_cuenta_destino)
+        id_usuario_origen = origen.get("id_usuario") if origen else None
+        id_usuario_destino = destino.get("id_usuario") if destino else None
+    except AccountUnavailable:
+        pass
+    published = publish_event(
+        EVENT_TRANSFER_COMPLETED,
+        {
+            "event": EVENT_TRANSFER_COMPLETED,
+            "id_transferencia": str(transferencia.id_transferencia),
+            "id_cuenta_origen": str(transferencia.id_cuenta_origen),
+            "monto": str(transferencia.monto),
+            "estado": transferencia.estado,
+            "fecha_solicitud": transferencia.fecha_solicitud.isoformat(),
+            "referencia": transferencia.referencia,
+            "concepto": transferencia.concepto,
+            "nombre_destino": nombre_destino,
+            "id_usuario_origen": str(id_usuario_origen) if id_usuario_origen else None,
+            "id_usuario_destino": str(id_usuario_destino) if id_usuario_destino else None,
+        },
+    )
+    if not published:
+        background.add_task(
+            notificar_transferencia,
+            referencia=transferencia.referencia,
+            monto=transferencia.monto,
+            id_usuario_origen=id_usuario_origen,
+            id_usuario_destino=id_usuario_destino,
+            nombre_destino=nombre_destino,
+            concepto=transferencia.concepto,
+        )
+    return published
 
 
 # ============================================================================
