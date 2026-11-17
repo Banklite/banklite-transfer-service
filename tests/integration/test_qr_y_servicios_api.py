@@ -133,3 +133,15 @@ def test_la_consulta_de_factura_no_inventa_valores(client):
     existe = client.post("/transfers/servicios/consultar", json={"convenio_codigo": "EPM", "referencia_pago": "123456789"})
     no_existe = client.post("/transfers/servicios/consultar", json={"convenio_codigo": "XYZ", "referencia_pago": "123456789"})
     assert existe.status_code == 501 and no_existe.status_code == 404
+
+
+def test_si_no_se_puede_consultar_el_saldo_se_responde_503_y_no_500(client, qr, externos):
+    """El ledger caido es un fallo temporal de una dependencia (503), no un error del servicio (500)."""
+    externos["saldo"].side_effect = LedgerUnavailable("timeout")
+
+    servicio = client.post("/transfers/servicios/pagar", json={
+        "id_cuenta_origen": str(ORIGEN), "convenio_codigo": "EPM", "referencia_pago": "123456789", "monto": "98500"})
+    pago_qr = client.post("/transfers/qr/pagar", json={"id_cuenta_origen": str(ORIGEN), "qr_payload": qr["qr_payload"], "monto": "1000"})
+
+    assert servicio.status_code == 503 and pago_qr.status_code == 503
+    externos["asiento"].assert_not_called()
