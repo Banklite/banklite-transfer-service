@@ -1,5 +1,6 @@
 import threading
 import uuid
+from decimal import Decimal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
