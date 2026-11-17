@@ -95,6 +95,26 @@ uvicorn app.main:app --reload --port 8004
 
 Prueba: abre <http://localhost:8004/docs>.
 
+## Pruebas automatizadas
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests -v --cov=app --cov-report=term-missing --cov-report=html
+```
+
+No necesitan PostgreSQL, RabbitMQ ni los otros microservicios: la base es SQLite en memoria y las dependencias externas se reemplazan con mocks (`unittest.mock`). El reporte navegable queda en `htmlcov/index.html`.
+
+| Tipo | Archivo | Que verifica |
+|---|---|---|
+| Unitaria (mocks) | `tests/unit/test_clientes_rest.py` | Clientes REST hacia fraud-service (fail-open) y ledger-service (partida doble, rechazo vs. caida) con `httpx` simulado. |
+| Unitaria (mocks) | `tests/unit/test_qr_aviso.py` | El pago por QR publica `transfer.completed`; si el bus no esta, avisa por REST. |
+| Integracion | `tests/integration/test_transfers_api.py` | La SAGA de `POST /transfers` completa: catalogo en la base -> account -> saldo -> antifraude -> partida doble -> evento. Fallos a mitad de camino dejan la transferencia `rechazada`; idempotencia. |
+| Integracion | `tests/integration/test_qr_y_servicios_api.py` | Cobro y pago con QR y pago de servicios publicos contra la cuenta puente. |
+
+Resultado actual: **40 pruebas** (9 unitarias y 31 de integracion), todas aprobadas, con **74 % de cobertura** de `app/`.
+
+En GitHub Actions las pruebas corren en cada `push` y `pull request`. Si una falla, la imagen no se construye y no se despliega. El reporte de cobertura queda en el resumen de la ejecucion y como artefacto descargable `coverage-banklite-transfer-service`.
+
 ## Repositorios del proyecto
 
 `banklite-identity-service`, `banklite-account-service`, `banklite-ledger-service`, `banklite-transfer-service`, `banklite-card-service`, `banklite-fraud-service`, `banklite-notification-service`, `banklite-compliance-service`. Panel web: `services/web-panel` en el repositorio `banklite-microservicios`.
