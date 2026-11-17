@@ -1,5 +1,6 @@
 import threading
 import uuid
+from decimal import Decimal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -368,7 +369,10 @@ def pagar_servicio_publico(payload: PagoServicioRequest, db: Session = Depends(g
     if not convenio:
         raise HTTPException(status_code=404, detail="Convenio no valido")
 
-    saldo = get_ledger_balance(payload.id_cuenta_origen)
+    try:
+        saldo = get_ledger_balance(payload.id_cuenta_origen)
+    except LedgerUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"No se pudo consultar el saldo: {exc}")
     if saldo < payload.monto:
         raise HTTPException(status_code=400, detail=f"Fondos insuficientes: saldo ${saldo:,.2f}")
 
@@ -478,7 +482,10 @@ def pagar_con_qr(payload: QRPagarRequest, background: BackgroundTasks, db: Sessi
         raise HTTPException(status_code=400, detail="Debes especificar un monto valido a transferir")
 
     # Validar fondos
-    saldo = get_ledger_balance(payload.id_cuenta_origen)
+    try:
+        saldo = get_ledger_balance(payload.id_cuenta_origen)
+    except LedgerUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"No se pudo consultar el saldo: {exc}")
     if saldo < monto_a_pagar:
         raise HTTPException(status_code=409, detail=f"Fondos insuficientes: saldo ${saldo:,.2f}")
 
